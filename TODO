@@ -1,0 +1,4 @@
+- don't use CargoCallbacks
+- spawn_mount() & mount()
+- more filesystem operations
+- fuse_file_info & context
