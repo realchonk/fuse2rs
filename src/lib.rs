@@ -1,3 +1,4 @@
+use std::ffi::CString;
 use std::path::Path;
 use std::io::Result;
 use std::time::SystemTime;
@@ -65,7 +66,69 @@ pub trait Filesystem {
     fn open(&mut self, path: &Path) -> Result<()>;
 }
 
+#[derive(Debug, Clone)]
+pub enum MountOption {
+    Foreground,
+    Debug,
+    AllowOther,
+    DefaultPermissions,
+    KernelCache,
+    Ro,
+    Rw,
+    Atime,
+    NoAtime,
+    Dev,
+    NoDev,
+    Suid,
+    NoSuid,
+    Exec,
+    NoExec,
+    Sync,
+    Async,
+    UseIno,
+    ReaddirIno,
+    HardRemove,
+    Uid(u32),
+    Gid(u32),
+    Umask(u16),
+    Custom(CString),
+}
 
-pub fn mount(mp: &Path, fs: impl Filesystem + 'static) {
-    crate::ll::xmount(mp, Box::new(fs));
+impl MountOption {
+    fn into_cstring(self) -> CString {
+	match self {
+	    Self::Foreground => c"-f".into(),
+	    Self::Debug => c"-d".into(),
+	    Self::AllowOther => c"-oallow_other".into(),
+	    Self::DefaultPermissions => c"-odefault_permissions".into(),
+	    Self::KernelCache => c"-okernel_cache".into(),
+	    Self::Ro => c"-oro".into(),
+	    Self::Rw => c"-orw".into(),
+	    Self::Atime => c"-oatime".into(),
+	    Self::NoAtime => c"-onoatime".into(),
+	    Self::Dev => c"-odev".into(),
+	    Self::NoDev => c"-onodev".into(),
+	    Self::Exec => c"-oexec".into(),
+	    Self::NoExec => c"-onoexec".into(),
+	    Self::Suid => c"-osuid".into(),
+	    Self::NoSuid => c"-onosuid".into(),
+	    Self::Sync => c"-osync".into(),
+	    Self::Async => c"-oasync".into(),
+	    Self::UseIno => c"-ouse_ino".into(),
+	    Self::ReaddirIno => c"-oreaddir_ino".into(),
+	    Self::HardRemove => c"-ohard_remove".into(),
+	    Self::Uid(uid) => CString::new(format!("-ouid={uid}")).unwrap(),
+	    Self::Gid(gid) => CString::new(format!("-ogid={gid}")).unwrap(),
+	    Self::Umask(mask) => CString::new(format!("-oumask={mask:o}")).unwrap(),
+	    Self::Custom(c) => c,
+	}
+    }
+}
+
+pub fn mount(mp: &Path, fs: impl Filesystem + 'static, opts: Vec<MountOption>) {
+    let opts = opts
+        .into_iter()
+        .map(|opt| opt.into_cstring())
+	.collect();
+    crate::ll::xmount(mp, Box::new(fs), opts);
 }

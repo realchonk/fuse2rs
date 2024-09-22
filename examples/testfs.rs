@@ -73,5 +73,10 @@ impl Filesystem for Testfs {
 }
 
 fn main() {
-    fuse2rs::mount(Path::new("mp"), Testfs);
+    let args = vec![
+	MountOption::Foreground,
+	MountOption::Debug,
+	MountOption::AllowOther,
+    ];
+    fuse2rs::mount(Path::new("mp"), Testfs, args);
 }

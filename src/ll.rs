@@ -1,4 +1,5 @@
 use crate::{FileType, Filesystem};
+use std::iter::once;
 use std::os::unix::ffi::OsStrExt;
 use std::path::Path;
 use std::ffi::*;
@@ -183,7 +184,7 @@ static FSOPS: fuse2::fuse_operations = fuse2::fuse_operations {
 // TODO:
 // - accept mount options
 // - error hamdling
-pub fn xmount(mp: &Path, fs: Box<dyn Filesystem>) {
+pub fn xmount(mp: &Path, fs: Box<dyn Filesystem>, opts: Vec<CString>) {
     // TODO: this sucks, find something better
     let mut mp = mp.as_os_str().as_bytes().to_vec();
     mp.push(b'\0');
@@ -194,17 +195,12 @@ pub fn xmount(mp: &Path, fs: Box<dyn Filesystem>) {
     });
 
     // TODO: generate proper mount options
-    let args = [
-	c"-f",
-	c"-d",
-	c"-oallow_other",
-	&mp,
-    ];
 
-    let mut args = args
+    let mut args = opts
         .into_iter()
-        .map(|s| CString::from(s).into_raw())
-        .chain(std::iter::once(std::ptr::null_mut()))
+        .chain(once(mp))
+        .map(|s| s.into_raw())
+        .chain(once(std::ptr::null_mut()))
         .collect::<Vec<_>>();
 
     let argc = args.len() as i32 - 1;
