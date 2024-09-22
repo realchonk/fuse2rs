@@ -176,7 +176,6 @@ unsafe extern "C" fn fs_open(
 	}
 }
 
-// TODO: Filesystem::statvfs()
 unsafe extern "C" fn fs_statfs(
 	path: *const c_char,
 	st: *mut fuse2::statvfs,
@@ -199,6 +198,17 @@ unsafe extern "C" fn fs_statfs(
 		},
 		Err(e) => -e.raw_os_error().unwrap_or(libc::EIO),
 	}
+}
+
+unsafe extern "C" fn fs_init(_info: *mut fuse2::fuse_conn_info) -> *mut c_void {
+	let (fs, req) = request();
+	fs.init(&req);
+	std::ptr::null_mut()
+}
+
+unsafe extern "C" fn fs_destroy(_ptr: *mut c_void) {
+	let (fs, _req) = request();
+	fs.destroy();
 }
 
 static FSOPS: fuse2::fuse_operations = fuse2::fuse_operations {
@@ -233,8 +243,8 @@ static FSOPS: fuse2::fuse_operations = fuse2::fuse_operations {
 	readdir: Some(fs_readdir),
 	releasedir: None,
 	fsyncdir: None,
-	init: None,
-	destroy: None,
+	init: Some(fs_init),
+	destroy: Some(fs_destroy),
 	create: None,
 	ftruncate: None,
 	fgetattr: None,

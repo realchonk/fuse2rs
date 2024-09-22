@@ -48,7 +48,11 @@ pub trait Filesystem {
 		_info: &FileInfo,
 	) -> Result<usize>;
 
+	// OPTIONAL
 
+	// TODO: KernelConfig
+	fn init(&mut self, _req: &Request) {}
+	fn destroy(&mut self) {}
 
 	fn open(
 		&mut self,
