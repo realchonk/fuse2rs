@@ -147,10 +147,24 @@ unsafe extern "C" fn fs_statfs(
 	path: *const c_char,
 	st: *mut fuse2::statvfs,
 ) -> c_int {
-	let _path = map_path(path);
-	let _st = &mut *st;
+	let path = map_path(path);
+	let st = &mut *st;
+	let fs = get_filesystem();
 
-	0
+	match fs.statfs(path) {
+		Ok(s) => {
+			st.f_bsize = s.bsize.into();
+			st.f_frsize = s.frsize.into();
+			st.f_blocks = s.blocks;
+			st.f_bfree = s.bfree;
+			st.f_bavail = s.bavail;
+			st.f_files = s.files;
+			st.f_ffree = s.ffree;
+			st.f_favail = s.favail;
+			0
+		},
+		Err(e) => -e.raw_os_error().unwrap_or(libc::EIO),
+	}
 }
 
 static FSOPS: fuse2::fuse_operations = fuse2::fuse_operations {

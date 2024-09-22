@@ -7,7 +7,17 @@ mod ll;
 
 pub use crate::ll::DirFiller;
 
-#[derive(Default)]
+pub trait Filesystem {
+	fn getattr(&mut self, path: &Path) -> Result<FileAttr>;
+	fn readdir(&mut self, path: &Path, off: u64, filler: &mut DirFiller) -> Result<()>;
+	fn read(&mut self, path: &Path, off: u64, buf: &mut [u8]) -> Result<usize>;
+	fn open(&mut self, path: &Path) -> Result<()>;
+	fn statfs(&mut self, _path: &Path) -> Result<Statfs> {
+		Ok(Statfs::default())
+	}
+}
+
+#[derive(Debug, Default, Clone, Copy)]
 pub enum FileType {
 	#[default]
 	RegularFile,
@@ -19,6 +29,19 @@ pub enum FileType {
 	Symlink,
 }
 
+#[derive(Debug, Default, Clone)]
+pub struct Statfs {
+	pub bsize: u32,
+	pub frsize: u32,
+	pub blocks: u64,
+	pub bfree: u64,
+	pub bavail: u64,
+	pub files: u64,
+	pub ffree: u64,
+	pub favail: u64,
+}
+
+#[derive(Debug, Clone)]
 pub struct FileAttr {
 	pub ino: u64,
 	pub size: u64,
@@ -57,13 +80,6 @@ impl Default for FileAttr {
 			nlink: 1,
 		}
 	}
-}
-
-pub trait Filesystem {
-	fn getattr(&mut self, path: &Path) -> Result<FileAttr>;
-	fn readdir(&mut self, path: &Path, off: u64, filler: &mut DirFiller) -> Result<()>;
-	fn read(&mut self, path: &Path, off: u64, buf: &mut [u8]) -> Result<usize>;
-	fn open(&mut self, path: &Path) -> Result<()>;
 }
 
 #[derive(Debug, Clone)]
