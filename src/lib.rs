@@ -74,6 +74,26 @@ pub trait Filesystem {
 		Ok(())
 	}
 
+	fn release(
+		&mut self,
+		_req: &Request,
+		path: &Path,
+		_info: &FileInfo,
+	) -> Result<()> {
+		let _ = path;
+		Ok(())
+	}
+
+	fn releasedir(
+		&mut self,
+		_req: &Request,
+		path: &Path,
+		_info: &FileInfo,
+	) -> Result<()> {
+		let _ = path;
+		Ok(())
+	}
+
 	fn statfs(
 		&mut self,
 		_req: &Request,

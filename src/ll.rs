@@ -239,6 +239,28 @@ unsafe extern "C" fn fs_readlink(path: *const c_char, buf: *mut c_char, size: us
 	}
 }
 
+unsafe extern "C" fn fs_release(path: *const c_char, ffi: *mut fuse2::fuse_file_info) -> c_int {
+	let path = map_path(path);
+	let info = FileInfo::from(&*ffi);
+	let (fs, req) = request();
+
+	match fs.release(&req, path, &info) {
+		Ok(()) => 0,
+		Err(e) => -e.raw_os_error().unwrap_or(libc::EIO),
+	}
+}
+
+unsafe extern "C" fn fs_releasedir(path: *const c_char, ffi: *mut fuse2::fuse_file_info) -> c_int {
+	let path = map_path(path);
+	let info = FileInfo::from(&*ffi);
+	let (fs, req) = request();
+
+	match fs.releasedir(&req, path, &info) {
+		Ok(()) => 0,
+		Err(e) => -e.raw_os_error().unwrap_or(libc::EIO),
+	}
+}
+
 static FSOPS: fuse2::fuse_operations = fuse2::fuse_operations {
 	access: None,
 	bmap: None,
@@ -261,7 +283,7 @@ static FSOPS: fuse2::fuse_operations = fuse2::fuse_operations {
 	write: None,
 	statfs: Some(fs_statfs),
 	flush: None,
-	release: None,
+	release: Some(fs_release),
 	fsync: None,
 	setxattr: None,
 	getxattr: None,
@@ -269,7 +291,7 @@ static FSOPS: fuse2::fuse_operations = fuse2::fuse_operations {
 	removexattr: None,
 	opendir: Some(fs_opendir),
 	readdir: Some(fs_readdir),
-	releasedir: None,
+	releasedir: Some(fs_releasedir),
 	fsyncdir: None,
 	init: Some(fs_init),
 	destroy: Some(fs_destroy),
