@@ -176,6 +176,23 @@ unsafe extern "C" fn fs_open(
 	}
 }
 
+unsafe extern "C" fn fs_opendir(
+	path: *const c_char,
+	ffi: *mut fuse2::fuse_file_info,
+) -> c_int {
+	let path = map_path(path);
+	let (fs, req) = request();
+	let mut info = FileInfo::from(&*ffi);
+
+	match fs.opendir(&req, path, &mut info) {
+		Ok(()) => {
+			info.write(&mut *ffi);
+			0
+		},
+		Err(e) => -e.raw_os_error().unwrap_or(libc::EIO),
+	}
+}
+
 unsafe extern "C" fn fs_statfs(
 	path: *const c_char,
 	st: *mut fuse2::statvfs,
@@ -250,7 +267,7 @@ static FSOPS: fuse2::fuse_operations = fuse2::fuse_operations {
 	getxattr: None,
 	listxattr: None,
 	removexattr: None,
-	opendir: None,
+	opendir: Some(fs_opendir),
 	readdir: Some(fs_readdir),
 	releasedir: None,
 	fsyncdir: None,

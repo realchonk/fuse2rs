@@ -64,6 +64,16 @@ pub trait Filesystem {
 		Ok(())
 	}
 
+	fn opendir(
+		&mut self,
+		_req: &Request,
+		path: &Path,
+		_info: &mut FileInfo,
+	) -> Result<()> {
+		let _ = path;
+		Ok(())
+	}
+
 	fn statfs(
 		&mut self,
 		_req: &Request,
