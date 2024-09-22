@@ -1,7 +1,13 @@
 [package]
 name = "fuse2rs"
-version = "0.1.0"
+version = "0.0.1"
 edition = "2021"
+license = "BSD-3-Clause"
+authors = ["Benjamin Stürz <benni@stuerz.xyz"]
+description = "FUSE2 bindings for Rust (mainly for OpenBSD)"
+repository = "https://github.com/realchonk/fuse2rs"
+rust-version = "1.77.0"
+include = ["LICENSE", "ChangeLog.md"]
 
 [dependencies]
 libc = "0.2.158"
