@@ -1,4 +1,4 @@
-use crate::{FileType, Filesystem};
+use crate::{FileInfo, FileType, Filesystem, Request};
 use std::{
 	iter::once,
 	os::unix::ffi::OsStrExt,
@@ -32,10 +32,15 @@ struct Context {
 	fs: Box<dyn Filesystem>,
 }
 
-pub unsafe fn get_filesystem() -> &'static mut dyn Filesystem {
+pub unsafe fn request() -> (&'static mut dyn Filesystem, Request) {
 	let ctx = &mut *fuse2::fuse_get_context();
 	let data = &mut *(ctx.private_data as *mut Context);
-	&mut *data.fs
+	let req = Request {
+		uid: ctx.uid,
+		gid: ctx.uid,
+		umask: ctx.umask,
+	};
+	(&mut *data.fs, req)
 }
 fn map_path(path: *const c_char) -> &'static Path {
 	Path::new(OsStr::from_bytes(unsafe { CStr::from_ptr(path) }.to_bytes()))
@@ -55,10 +60,10 @@ unsafe extern "C" fn fs_getattr(
 	st: *mut fuse2::stat,
 ) -> c_int {
 	let path = map_path(path);
-	let fs = get_filesystem();
+	let (fs, req) = request();
 	let st = &mut *st;
 
-	match fs.getattr(path) {
+	match fs.getattr(&req, path) {
 		Ok(attr) => {
 
 			let kind = match attr.kind {
@@ -91,22 +96,46 @@ unsafe extern "C" fn fs_getattr(
 	}
 }
 
+impl From<&fuse2::fuse_file_info> for FileInfo {
+	fn from(info: &fuse2::fuse_file_info) -> Self {
+		Self {
+			fh: info.fh,
+			flags: info.flags,
+			flush: info.flush() != 0,
+			direct_io: info.direct_io() != 0,
+			keep_cache: info.keep_cache() != 0,
+			nonseekable: info.nonseekable() != 0,
+		}
+	}
+}
+
+impl FileInfo {
+	fn write(&self, info: &mut fuse2::fuse_file_info) {
+		info.fh = self.fh;
+		info.set_flush(self.flush as u32);
+		info.set_direct_io(self.direct_io as u32);
+		info.set_keep_cache(self.keep_cache as u32);
+		info.set_nonseekable(self.nonseekable as u32);
+	}
+}
+
 unsafe extern "C" fn fs_readdir(
 	path: *const c_char,
 	data: *mut c_void,
 	filler: fuse2::fuse_fill_dir_t,
 	off: fuse2::off_t,
-	_ffi: *mut fuse2::fuse_file_info,
+	ffi: *mut fuse2::fuse_file_info,
 ) -> c_int {
 	let path = map_path(path);
-	let fs = get_filesystem();
+	let (fs, req) = request();
 
 	let mut filler = DirFiller {
 		func: filler,
 		data,
 	};
 
-	match fs.readdir(path, off as u64, &mut filler) {
+	let info = FileInfo::from(&*ffi);
+	match fs.readdir(&req, path, off as u64, &mut filler, &info) {
 		Ok(()) => 0,
 		Err(e) => -e.raw_os_error().unwrap_or(libc::EIO),
 	}
@@ -117,13 +146,14 @@ unsafe extern "C" fn fs_read(
 	buf: *mut c_char,
 	size: usize,
 	off: fuse2::off_t,
-	_ffi: *mut fuse2::fuse_file_info,
+	ffi: *mut fuse2::fuse_file_info,
 ) -> c_int {
 	let path = map_path(path);
-	let fs = get_filesystem();
+	let (fs, req) = request();
+	let info = FileInfo::from(&*ffi);
 	let buf = std::slice::from_raw_parts_mut(buf as *mut u8, size);
 
-	match fs.read(path, off as u64, buf) {
+	match fs.read(&req, path, off as u64, buf, &info) {
 		Ok(n) => n as c_int,
 		Err(e) => -e.raw_os_error().unwrap_or(libc::EIO),
 	}
@@ -131,13 +161,17 @@ unsafe extern "C" fn fs_read(
 
 unsafe extern "C" fn fs_open(
 	path: *const c_char,
-	_ffi: *mut fuse2::fuse_file_info,
+	ffi: *mut fuse2::fuse_file_info,
 ) -> c_int {
 	let path = map_path(path);
-	let fs = get_filesystem();
+	let (fs, req) = request();
+	let mut info = FileInfo::from(&*ffi);
 
-	match fs.open(path) {
-		Ok(()) => 0,
+	match fs.open(&req, path, &mut info) {
+		Ok(()) => {
+			info.write(&mut *ffi);
+			0
+		},
 		Err(e) => -e.raw_os_error().unwrap_or(libc::EIO),
 	}
 }
@@ -149,9 +183,9 @@ unsafe extern "C" fn fs_statfs(
 ) -> c_int {
 	let path = map_path(path);
 	let st = &mut *st;
-	let fs = get_filesystem();
+	let (fs, req) = request();
 
-	match fs.statfs(path) {
+	match fs.statfs(&req, path) {
 		Ok(s) => {
 			st.f_bsize = s.bsize.into();
 			st.f_frsize = s.frsize.into();

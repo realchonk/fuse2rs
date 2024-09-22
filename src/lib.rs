@@ -2,20 +2,68 @@ use std::ffi::CString;
 use std::path::Path;
 use std::io::Result;
 use std::time::SystemTime;
+use libc::{gid_t, mode_t, uid_t};
 
 mod ll;
 
 pub use crate::ll::DirFiller;
 
-pub trait Filesystem {
-	fn getattr(&mut self, path: &Path) -> Result<FileAttr>;
-	fn readdir(&mut self, path: &Path, off: u64, filler: &mut DirFiller) -> Result<()>;
-	fn read(&mut self, path: &Path, off: u64, buf: &mut [u8]) -> Result<usize>;
+pub struct Request {
+	pub uid: uid_t,
+	pub gid: gid_t,
+	pub umask: mode_t,
+}
 
-	fn open(&mut self, _path: &Path) -> Result<()> {
+pub struct FileInfo {
+	pub flags: i32,
+	pub fh: u64,
+	pub direct_io: bool,
+	pub keep_cache: bool,
+	pub flush: bool,
+	pub nonseekable: bool,
+}
+
+pub trait Filesystem {
+	fn getattr(
+		&mut self,
+		_req: &Request,
+		path: &Path,
+	) -> Result<FileAttr>;
+
+	fn readdir(
+		&mut self,
+		_req: &Request,
+		path: &Path,
+		off: u64,
+		filler: &mut DirFiller,
+		_info: &FileInfo,
+	) -> Result<()>;
+
+	fn read(
+		&mut self,
+		_req: &Request,
+		path: &Path,
+		off: u64,
+		buf: &mut [u8],
+		_info: &FileInfo,
+	) -> Result<usize>;
+
+
+
+	fn open(
+		&mut self,
+		_req: &Request,
+		_path: &Path,
+		_info: &mut FileInfo,
+	) -> Result<()> {
 		Ok(())
 	}
-	fn statfs(&mut self, _path: &Path) -> Result<Statfs> {
+
+	fn statfs(
+		&mut self,
+		_req: &Request,
+		_path: &Path,
+	) -> Result<Statfs> {
 		Ok(Statfs::default())
 	}
 }

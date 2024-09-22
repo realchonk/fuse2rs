@@ -8,7 +8,11 @@ struct Testfs;
 const TEXT: &[u8] = b"Hello World\n";
 
 impl Filesystem for Testfs {
-	fn getattr(&mut self, path: &Path) -> Result<FileAttr> {
+	fn getattr(
+		&mut self,
+		_req: &Request,
+		path: &Path,
+	) -> Result<FileAttr> {
 		if path == Path::new("/") {
 			Ok(FileAttr {
 				kind: FileType::Directory,
@@ -29,7 +33,14 @@ impl Filesystem for Testfs {
 		}
 	}
 
-	fn readdir(&mut self, path: &Path, off: u64, filler: &mut DirFiller) -> Result<()> {
+	fn readdir(
+		&mut self,
+		_req: &Request,
+		path: &Path,
+		off: u64,
+		filler: &mut DirFiller,
+		_info: &FileInfo,
+	) -> Result<()> {
 		if path != Path::new("/") {
 			return Err(Error::from_raw_os_error(libc::ENOENT));
 		}
@@ -45,7 +56,14 @@ impl Filesystem for Testfs {
 		Ok(())
 	}
 
-	fn read(&mut self, path: &Path, off: u64, buf: &mut [u8]) -> Result<usize> {
+	fn read(
+		&mut self,
+		_req: &Request,
+		path: &Path,
+		off: u64,
+		buf: &mut [u8],
+		_info: &FileInfo,
+	) -> Result<usize> {
 		if path != Path::new("/test") {
 			return Err(Error::from_raw_os_error(libc::ENOENT));
 		}
