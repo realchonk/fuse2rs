@@ -1,5 +1,5 @@
 use std::path::PathBuf;
-use bindgen::{CargoCallbacks, Builder};
+use bindgen::Builder;
 
 
 fn main() {
@@ -7,7 +7,7 @@ fn main() {
 
 	let bindings = Builder::default()
 		.header("src/wrapper.h")
-		.parse_callbacks(Box::new(CargoCallbacks::new()))
+		.parse_callbacks(Box::new(bindgen::CargoCallbacks::new()))
 		.generate()
 		.unwrap();
 
