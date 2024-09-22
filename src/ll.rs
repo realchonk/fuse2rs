@@ -142,6 +142,16 @@ unsafe extern "C" fn fs_open(
 	}
 }
 
+// TODO: Filesystem::statvfs()
+unsafe extern "C" fn fs_statfs(
+	path: *const c_char,
+	st: *mut fuse2::statvfs,
+) -> c_int {
+	let _path = map_path(path);
+	let _st = &mut *st;
+
+	0
+}
 
 static FSOPS: fuse2::fuse_operations = fuse2::fuse_operations {
 	access: None,
@@ -163,7 +173,7 @@ static FSOPS: fuse2::fuse_operations = fuse2::fuse_operations {
 	open: Some(fs_open),
 	read: Some(fs_read),
 	write: None,
-	statfs: None,
+	statfs: Some(fs_statfs),
 	flush: None,
 	release: None,
 	fsync: None,
