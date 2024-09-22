@@ -234,7 +234,7 @@ unsafe extern "C" fn fs_readlink(path: *const c_char, buf: *mut c_char, size: us
 	let (fs, req) = request();
 
 	match fs.readlink(&req, path, buf) {
-		Ok(n) => n as c_int,
+		Ok(()) => 0,
 		Err(e) => -e.raw_os_error().unwrap_or(libc::EIO),
 	}
 }

@@ -108,7 +108,7 @@ pub trait Filesystem {
 		_req: &Request,
 		path: &Path,
 		buf: &mut [u8],
-	) -> Result<usize> {
+	) -> Result<()> {
 		let _ = (path, buf);
 		Err(Error::from_raw_os_error(libc::ENOSYS))
 	}
