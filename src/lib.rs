@@ -1,4 +1,4 @@
-use std::ffi::CString;
+use std::{ffi::CString, io::Error};
 use std::path::Path;
 use std::io::Result;
 use std::time::SystemTime;
@@ -57,18 +57,30 @@ pub trait Filesystem {
 	fn open(
 		&mut self,
 		_req: &Request,
-		_path: &Path,
+		path: &Path,
 		_info: &mut FileInfo,
 	) -> Result<()> {
+		let _ = path;
 		Ok(())
 	}
 
 	fn statfs(
 		&mut self,
 		_req: &Request,
-		_path: &Path,
+		path: &Path,
 	) -> Result<Statfs> {
+		let _ = path;
 		Ok(Statfs::default())
+	}
+
+	fn readlink(
+		&mut self,
+		_req: &Request,
+		path: &Path,
+		buf: &mut [u8],
+	) -> Result<usize> {
+		let _ = (path, buf);
+		Err(Error::from_raw_os_error(libc::ENOSYS))
 	}
 }
 

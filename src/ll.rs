@@ -211,11 +211,22 @@ unsafe extern "C" fn fs_destroy(_ptr: *mut c_void) {
 	fs.destroy();
 }
 
+unsafe extern "C" fn fs_readlink(path: *const c_char, buf: *mut c_char, size: usize) -> c_int {
+	let path = map_path(path);
+	let buf = std::slice::from_raw_parts_mut(buf as *mut u8, size);
+	let (fs, req) = request();
+
+	match fs.readlink(&req, path, buf) {
+		Ok(n) => n as c_int,
+		Err(e) => -e.raw_os_error().unwrap_or(libc::EIO),
+	}
+}
+
 static FSOPS: fuse2::fuse_operations = fuse2::fuse_operations {
 	access: None,
 	bmap: None,
 	getattr: Some(fs_getattr),
-	readlink: None,
+	readlink: Some(fs_readlink),
 	getdir: None,
 	mknod: None,
 	mkdir: None,
