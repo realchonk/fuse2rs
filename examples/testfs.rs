@@ -66,10 +66,6 @@ impl Filesystem for Testfs {
 
 		Ok(len)
 	}
-
-	fn open(&mut self, _path: &Path) -> Result<()> {
-		Ok(())
-	}
 }
 
 fn main() {

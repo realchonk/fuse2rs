@@ -11,7 +11,10 @@ pub trait Filesystem {
 	fn getattr(&mut self, path: &Path) -> Result<FileAttr>;
 	fn readdir(&mut self, path: &Path, off: u64, filler: &mut DirFiller) -> Result<()>;
 	fn read(&mut self, path: &Path, off: u64, buf: &mut [u8]) -> Result<usize>;
-	fn open(&mut self, path: &Path) -> Result<()>;
+
+	fn open(&mut self, _path: &Path) -> Result<()> {
+		Ok(())
+	}
 	fn statfs(&mut self, _path: &Path) -> Result<Statfs> {
 		Ok(Statfs::default())
 	}
