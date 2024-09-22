@@ -1,5 +1,5 @@
 use std::{
-    io::{Error, Result}, path::Path
+	io::{Error, Result}, path::Path
 };
 use fuse2rs::*;
 
@@ -8,75 +8,75 @@ struct Testfs;
 const TEXT: &[u8] = b"Hello World\n";
 
 impl Filesystem for Testfs {
-    fn getattr(&mut self, path: &Path) -> Result<FileAttr> {
-	if path == Path::new("/") {
-	    Ok(FileAttr {
-		kind: FileType::Directory,
-		perm: 0o755,
-		size: 512,
-		nlink: 2,
-		..FileAttr::default()
-	    })
-	} else if path == Path::new("/test") {
-	    Ok(FileAttr {
-		kind: FileType::RegularFile,
-		perm: 0o644,
-		size: TEXT.len() as u64,
-		..FileAttr::default()
-	    })
-	} else {
-	    Err(Error::from_raw_os_error(libc::ENOENT))
-	}
-    }
-
-    fn readdir(&mut self, path: &Path, off: u64, filler: &mut DirFiller) -> Result<()> {
-	if path != Path::new("/") {
-	    return Err(Error::from_raw_os_error(libc::ENOENT));
+	fn getattr(&mut self, path: &Path) -> Result<FileAttr> {
+		if path == Path::new("/") {
+			Ok(FileAttr {
+				kind: FileType::Directory,
+				perm: 0o755,
+				size: 512,
+				nlink: 2,
+				..FileAttr::default()
+			})
+		} else if path == Path::new("/test") {
+			Ok(FileAttr {
+				kind: FileType::RegularFile,
+				perm: 0o644,
+				size: TEXT.len() as u64,
+				..FileAttr::default()
+			})
+		} else {
+			Err(Error::from_raw_os_error(libc::ENOENT))
+		}
 	}
 
-	if off != 0 {
-	    return Ok(());
+	fn readdir(&mut self, path: &Path, off: u64, filler: &mut DirFiller) -> Result<()> {
+		if path != Path::new("/") {
+			return Err(Error::from_raw_os_error(libc::ENOENT));
+		}
+
+		if off != 0 {
+			return Ok(());
+		}
+
+		filler.push(c".");
+		filler.push(c"..");
+		filler.push(c"test");
+
+		Ok(())
 	}
 
-	filler.push(c".");
-	filler.push(c"..");
-	filler.push(c"test");
+	fn read(&mut self, path: &Path, off: u64, buf: &mut [u8]) -> Result<usize> {
+		if path != Path::new("/test") {
+			return Err(Error::from_raw_os_error(libc::ENOENT));
+		}
 
-	Ok(())
-    }
+		let off = off as usize;
 
-    fn read(&mut self, path: &Path, off: u64, buf: &mut [u8]) -> Result<usize> {
-	if path != Path::new("/test") {
-	    return Err(Error::from_raw_os_error(libc::ENOENT));
+		if off >= TEXT.len() {
+			return Ok(0);
+		}
+
+		let len = if off + buf.len() <= TEXT.len() {
+			buf.len()
+		} else {
+			TEXT.len() - off
+		};
+
+		buf[0..len].copy_from_slice(&TEXT[off..(off + len)]);
+
+		Ok(len)
 	}
 
-	let off = off as usize;
-
-	if off >= TEXT.len() {
-	    return Ok(0);
+	fn open(&mut self, _path: &Path) -> Result<()> {
+		Ok(())
 	}
-
-	let len = if off + buf.len() <= TEXT.len() {
-	    buf.len()
-	} else {
-	    TEXT.len() - off
-	};
-
-	buf[0..len].copy_from_slice(&TEXT[off..(off + len)]);
-
-	Ok(len)
-    }
-
-    fn open(&mut self, _path: &Path) -> Result<()> {
-	Ok(())
-    }
 }
 
 fn main() {
-    let args = vec![
-	MountOption::Foreground,
-	MountOption::Debug,
-	MountOption::AllowOther,
-    ];
-    fuse2rs::mount(Path::new("mp"), Testfs, args);
+	let args = vec![
+		MountOption::Foreground,
+		MountOption::Debug,
+		MountOption::AllowOther,
+	];
+	fuse2rs::mount(Path::new("mp"), Testfs, args);
 }
