@@ -125,10 +125,10 @@ impl MountOption {
 	}
 }
 
-pub fn mount(mp: &Path, fs: impl Filesystem + 'static, opts: Vec<MountOption>) {
+pub fn mount(mp: &Path, fs: impl Filesystem + 'static, opts: Vec<MountOption>) -> Result<()> {
 	let opts = opts
 		.into_iter()
 		.map(|opt| opt.into_cstring())
 		.collect();
-	crate::ll::xmount(mp, Box::new(fs), opts);
+	crate::ll::xmount(mp, Box::new(fs), opts)
 }

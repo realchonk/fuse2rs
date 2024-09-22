@@ -1,9 +1,12 @@
 use crate::{FileType, Filesystem};
-use std::iter::once;
-use std::os::unix::ffi::OsStrExt;
-use std::path::Path;
-use std::ffi::*;
-use std::time::SystemTime;
+use std::{
+	iter::once,
+	os::unix::ffi::OsStrExt,
+	path::Path,
+	ffi::*,
+	time::SystemTime,
+	io::{Result, Error},
+};
 
 
 #[allow(dead_code, unused_variables, non_camel_case_types, non_snake_case)]
@@ -181,20 +184,17 @@ static FSOPS: fuse2::fuse_operations = fuse2::fuse_operations {
 	utimens: None,
 };
 
-// TODO:
-// - accept mount options
-// - error hamdling
-pub fn xmount(mp: &Path, fs: Box<dyn Filesystem>, opts: Vec<CString>) {
+pub fn xmount(mp: &Path, fs: Box<dyn Filesystem>, opts: Vec<CString>) -> Result<()> {
 	// TODO: this sucks, find something better
 	let mut mp = mp.as_os_str().as_bytes().to_vec();
 	mp.push(b'\0');
-	let mp = CString::from_vec_with_nul(mp).unwrap();
+	let Ok(mp) = CString::from_vec_with_nul(mp) else {
+		return Err(Error::from_raw_os_error(libc::EINVAL))
+	};
 
 	let ctx = Box::new(Context {
 		fs,
 	});
-
-	// TODO: generate proper mount options
 
 	let mut args = opts
 		.into_iter()
@@ -206,7 +206,8 @@ pub fn xmount(mp: &Path, fs: Box<dyn Filesystem>, opts: Vec<CString>) {
 	let argc = args.len() as i32 - 1;
 	let argv = args.as_mut_ptr();
 
-	let ec = unsafe { fuse2::fuse_main(argc, argv, &FSOPS, Box::into_raw(ctx) as *mut c_void) };
-	assert_eq!(ec, 0);
-
+	match unsafe { fuse2::fuse_main(argc, argv, &FSOPS, Box::into_raw(ctx) as *mut c_void) } {
+		0 => Ok(()),
+		_ => Err(Error::from_raw_os_error(libc::EIO)),
+	}
 }

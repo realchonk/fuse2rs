@@ -73,10 +73,13 @@ impl Filesystem for Testfs {
 }
 
 fn main() {
+	let mp = std::env::args_os()
+		.nth(1)
+		.unwrap();
 	let args = vec![
 		MountOption::Foreground,
 		MountOption::Debug,
 		MountOption::AllowOther,
 	];
-	fuse2rs::mount(Path::new("mp"), Testfs, args);
+	fuse2rs::mount(Path::new(&mp), Testfs, args).unwrap();
 }
