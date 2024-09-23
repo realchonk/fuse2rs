@@ -1,3 +1,5 @@
+use cfg_if::cfg_if;
+
 use crate::{FileInfo, FileType, Filesystem, Request};
 use std::{
 	iter::once,
@@ -9,7 +11,7 @@ use std::{
 };
 
 
-#[allow(dead_code, unused_variables, non_camel_case_types, non_snake_case)]
+#[allow(dead_code, unused_variables, non_camel_case_types, non_snake_case, non_upper_case_globals)]
 mod fuse2 {
 	include!(concat!(env!("OUT_DIR"), "/bindings.rs"));
 }
@@ -65,7 +67,6 @@ unsafe extern "C" fn fs_getattr(
 
 	match fs.getattr(&req, path) {
 		Ok(attr) => {
-
 			let kind = match attr.kind {
 				FileType::RegularFile => libc::S_IFREG,
 				FileType::Directory => libc::S_IFDIR,
@@ -74,7 +75,7 @@ unsafe extern "C" fn fs_getattr(
 				FileType::NamedPipe => libc::S_IFIFO,
 				FileType::CharDevice => libc::S_IFCHR,
 				FileType::BlockDevice => libc::S_IFBLK,
-			};
+			} as u32;
 			
 			st.st_ino = attr.ino;
 			st.st_size = attr.size as i64;
@@ -82,12 +83,19 @@ unsafe extern "C" fn fs_getattr(
 			st.st_atim = map_time(attr.atime);
 			st.st_mtim = map_time(attr.mtime);
 			st.st_ctim = map_time(attr.ctime);
-			st.__st_birthtim = map_time(attr.btime);
-			st.st_mode = kind | attr.perm as u32;
-			st.st_nlink = attr.nlink;
+			cfg_if! {
+				if #[cfg(target_os = "openbsd")] {
+					st.__st_birthtim = map_time(attr.btime);
+				} else if #[cfg(target_os = "freebsd")] {
+					st.st_birthtim = map_time(attr.btime);
+				} else {
+				}
+			}
+			st.st_mode = (kind | attr.perm as u32).try_into().unwrap();
+			st.st_nlink = attr.nlink.try_into().unwrap();
 			st.st_uid = attr.uid;
 			st.st_gid = attr.gid;
-			st.st_rdev = attr.rdev as i32;
+			st.st_rdev = attr.rdev.try_into().unwrap();
 			st.st_blksize = attr.blksize as i32;
 			st.st_flags = attr.flags;
 			0
@@ -300,6 +308,9 @@ static FSOPS: fuse2::fuse_operations = fuse2::fuse_operations {
 	fgetattr: None,
 	lock: None,
 	utimens: None,
+
+	// this is _very_ ugly
+	..unsafe { std::mem::zeroed() }
 };
 
 pub fn xmount(mp: &Path, fs: Box<dyn Filesystem>, opts: Vec<CString>) -> Result<()> {
@@ -323,8 +334,21 @@ pub fn xmount(mp: &Path, fs: Box<dyn Filesystem>, opts: Vec<CString>) -> Result<
 
 	let argc = args.len() as i32 - 1;
 	let argv = args.as_mut_ptr();
+	let ctx = Box::into_raw(ctx) as *mut c_void;
 
-	match unsafe { fuse2::fuse_main(argc, argv, &FSOPS, Box::into_raw(ctx) as *mut c_void) } {
+	let ec;
+	cfg_if! {
+		if #[cfg(target_os = "freebsd")] {
+			ec = unsafe {
+				fuse2::fuse_main_real(argc, argv, &FSOPS, std::mem::size_of_val(&FSOPS), ctx)
+			};
+		} else {
+			ec = unsafe {
+				fuse2::fuse_main(argc, argv, &FSOPS, ctx)
+			};
+		}
+	};
+	match ec {
 		0 => Ok(()),
 		_ => Err(Error::from_raw_os_error(libc::EIO)),
 	}

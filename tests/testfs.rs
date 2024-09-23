@@ -51,6 +51,8 @@ impl Harness {
 			cfg_if! {
 				if #[cfg(target_os = "openbsd")] {
 					s.filesystem_type_name() == "fuse"
+				} else if #[cfg(target_os = "freebsd")] {
+					s.filesystem_type_name() == "fusefs"
 				}
 			}
 			
