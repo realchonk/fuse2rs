@@ -277,6 +277,14 @@ unsafe extern "C" fn fs_release(path: *const c_char, ffi: *mut fuse_file_info) -
 	map(fs.release(&req, path, &info))
 }
 
+unsafe extern "C" fn fs_flush(path: *const c_char, ffi: *mut fuse_file_info) -> c_int {
+	let path = map_path(path);
+	let info = FileInfo::from(&*ffi);
+	let (fs, req) = request();
+
+	map(fs.flush(&req, path, &info))
+}
+
 unsafe extern "C" fn fs_releasedir(path: *const c_char, ffi: *mut fuse_file_info) -> c_int {
 	let path = map_path(path);
 	let info = FileInfo::from(&*ffi);

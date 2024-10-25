@@ -68,6 +68,11 @@ pub trait Filesystem {
 		Ok(())
 	}
 
+	fn flush(&mut self, _req: &Request, path: &Path, _info: &FileInfo) -> Result<()> {
+		let _ = path;
+		Ok(())
+	}
+
 	fn releasedir(&mut self, _req: &Request, path: &Path, _info: &FileInfo) -> Result<()> {
 		let _ = path;
 		Ok(())
