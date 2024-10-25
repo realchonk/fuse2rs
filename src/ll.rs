@@ -274,6 +274,13 @@ unsafe extern "C" fn fs_unlink(path: *const c_char) -> c_int {
 	map(fs.unlink(&req, path))
 }
 
+unsafe extern "C" fn fs_rmdir(path: *const c_char) -> c_int {
+	let path = map_path(path);
+	let (fs, req) = request();
+
+	map(fs.rmdir(&req, path))
+}
+
 unsafe extern "C" fn fs_chown(path: *const c_char, uid: uid_t, gid: gid_t) -> c_int {
 	let path = map_path(path);
 	let uid = if uid < u32::MAX { Some(uid) } else { None };
@@ -343,7 +350,7 @@ static FSOPS: fuse2::fuse_operations = fuse2::fuse_operations {
 	mknod: None,
 	mkdir: None,
 	unlink: Some(fs_unlink),
-	rmdir: None,
+	rmdir: Some(fs_rmdir),
 	symlink: None,
 	rename: None,
 	link: None,
