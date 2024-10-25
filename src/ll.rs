@@ -12,6 +12,8 @@ use cfg_if::cfg_if;
 
 use crate::{FileInfo, FileType, Filesystem, Request};
 
+use self::fuse2::dev_t;
+
 #[allow(
 	dead_code,
 	unused_variables,
@@ -306,6 +308,13 @@ unsafe extern "C" fn fs_mkdir(path: *const c_char, mode: mode_t) -> c_int {
 	map(fs.mkdir(&req, path, mode as u32))
 }
 
+unsafe extern "C" fn fs_mknod(path: *const c_char, mode: mode_t, dev: dev_t) -> c_int {
+	let path = map_path(path);
+	let (fs, req) = request();
+
+	map(fs.mknod(&req, path, mode as u32, dev as u32))
+}
+
 unsafe extern "C" fn fs_chown(path: *const c_char, uid: uid_t, gid: gid_t) -> c_int {
 	let path = map_path(path);
 	let uid = if uid < u32::MAX { Some(uid) } else { None };
@@ -372,7 +381,7 @@ static FSOPS: fuse2::fuse_operations = fuse2::fuse_operations {
 	getattr: Some(fs_getattr),
 	readlink: Some(fs_readlink),
 	getdir: None,
-	mknod: None,
+	mknod: Some(fs_mknod),
 	mkdir: Some(fs_mkdir),
 	unlink: Some(fs_unlink),
 	rmdir: Some(fs_rmdir),
