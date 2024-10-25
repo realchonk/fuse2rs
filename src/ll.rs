@@ -10,7 +10,7 @@ use cfg_if::cfg_if;
 
 use crate::{FileInfo, FileType, Filesystem, Request};
 
-use self::fuse2::{dev_t, off_t, gid_t, mode_t, timespec, uid_t, utimbuf};
+use self::fuse2::{dev_t, fuse_file_info, fuse_fill_dir_t, gid_t, mode_t, off_t, timespec, uid_t, utimbuf};
 
 #[allow(
 	dead_code,
@@ -150,9 +150,9 @@ unsafe extern "C" fn fs_getattr(path: *const c_char, st: *mut fuse2::stat) -> c_
 unsafe extern "C" fn fs_readdir(
 	path: *const c_char,
 	data: *mut c_void,
-	filler: fuse2::fuse_fill_dir_t,
-	off: fuse2::off_t,
-	ffi: *mut fuse2::fuse_file_info,
+	filler: fuse_fill_dir_t,
+	off: off_t,
+	ffi: *mut fuse_file_info,
 ) -> c_int {
 	let path = map_path(path);
 	let (fs, req) = request();
@@ -167,8 +167,8 @@ unsafe extern "C" fn fs_read(
 	path: *const c_char,
 	buf: *mut c_char,
 	size: usize,
-	off: fuse2::off_t,
-	ffi: *mut fuse2::fuse_file_info,
+	off: off_t,
+	ffi: *mut fuse_file_info,
 ) -> c_int {
 	let path = map_path(path);
 	let (fs, req) = request();
@@ -185,8 +185,8 @@ unsafe extern "C" fn fs_write(
 	path: *const c_char,
 	buf: *const c_char,
 	size: usize,
-	off: fuse2::off_t,
-	ffi: *mut fuse2::fuse_file_info,
+	off: off_t,
+	ffi: *mut fuse_file_info,
 ) -> c_int {
 	let path = map_path(path);
 	let (fs, req) = request();
@@ -199,7 +199,7 @@ unsafe extern "C" fn fs_write(
 	}
 }
 
-unsafe extern "C" fn fs_open(path: *const c_char, ffi: *mut fuse2::fuse_file_info) -> c_int {
+unsafe extern "C" fn fs_open(path: *const c_char, ffi: *mut fuse_file_info) -> c_int {
 	let path = map_path(path);
 	let (fs, req) = request();
 	let mut info = FileInfo::from(&*ffi);
@@ -211,7 +211,7 @@ unsafe extern "C" fn fs_open(path: *const c_char, ffi: *mut fuse2::fuse_file_inf
 	)
 }
 
-unsafe extern "C" fn fs_opendir(path: *const c_char, ffi: *mut fuse2::fuse_file_info) -> c_int {
+unsafe extern "C" fn fs_opendir(path: *const c_char, ffi: *mut fuse_file_info) -> c_int {
 	let path = map_path(path);
 	let (fs, req) = request();
 	let mut info = FileInfo::from(&*ffi);
@@ -269,7 +269,7 @@ unsafe extern "C" fn fs_readlink(path: *const c_char, buf: *mut c_char, size: us
 	map(fs.readlink(&req, path, buf))
 }
 
-unsafe extern "C" fn fs_release(path: *const c_char, ffi: *mut fuse2::fuse_file_info) -> c_int {
+unsafe extern "C" fn fs_release(path: *const c_char, ffi: *mut fuse_file_info) -> c_int {
 	let path = map_path(path);
 	let info = FileInfo::from(&*ffi);
 	let (fs, req) = request();
@@ -277,7 +277,7 @@ unsafe extern "C" fn fs_release(path: *const c_char, ffi: *mut fuse2::fuse_file_
 	map(fs.release(&req, path, &info))
 }
 
-unsafe extern "C" fn fs_releasedir(path: *const c_char, ffi: *mut fuse2::fuse_file_info) -> c_int {
+unsafe extern "C" fn fs_releasedir(path: *const c_char, ffi: *mut fuse_file_info) -> c_int {
 	let path = map_path(path);
 	let info = FileInfo::from(&*ffi);
 	let (fs, req) = request();
@@ -311,6 +311,14 @@ unsafe extern "C" fn fs_mknod(path: *const c_char, mode: mode_t, dev: dev_t) -> 
 	let (fs, req) = request();
 
 	map(fs.mknod(&req, path, mode as u32, dev as u32))
+}
+
+unsafe extern "C" fn fs_create(path: *const c_char, mode: mode_t, ffi: *mut fuse_file_info) -> c_int {
+	let path = map_path(path);
+	let (fs, req) = request();
+	let info = FileInfo::from(&*ffi);
+
+	map(fs.create(&req, path, mode as u32, &info))
 }
 
 unsafe extern "C" fn fs_chown(path: *const c_char, uid: uid_t, gid: gid_t) -> c_int {
@@ -439,7 +447,7 @@ static FSOPS: fuse2::fuse_operations = fuse2::fuse_operations {
 	fsyncdir: None,
 	init: Some(fs_init),
 	destroy: Some(fs_destroy),
-	create: None,
+	create: Some(fs_create),
 	ftruncate: None,
 	fgetattr: None,
 	lock: None,
