@@ -442,7 +442,7 @@ static FSOPS: fuse2::fuse_operations = fuse2::fuse_operations {
 	read: Some(fs_read),
 	write: Some(fs_write),
 	statfs: Some(fs_statfs),
-	flush: None,
+	flush: Some(fs_flush),
 	release: Some(fs_release),
 	fsync: None,
 	setxattr: None,
