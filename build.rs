@@ -1,6 +1,6 @@
 use std::path::PathBuf;
-use bindgen::Builder;
 
+use bindgen::Builder;
 
 fn main() {
 	#[cfg(target_os = "freebsd")]
@@ -14,7 +14,6 @@ fn main() {
 		.generate()
 		.unwrap();
 
-	let path = PathBuf::from(std::env::var("OUT_DIR").unwrap())
-		.join("bindings.rs");
+	let path = PathBuf::from(std::env::var("OUT_DIR").unwrap()).join("bindings.rs");
 	bindings.write_to_file(path).unwrap();
 }

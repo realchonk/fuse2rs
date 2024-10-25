@@ -1,17 +1,23 @@
-use cfg_if::cfg_if;
-
-use crate::{FileInfo, FileType, Filesystem, Request};
 use std::{
+	ffi::*,
+	io::{Error, Result},
 	iter::once,
 	os::unix::ffi::OsStrExt,
 	path::Path,
-	ffi::*,
 	time::SystemTime,
-	io::{Result, Error},
 };
 
+use cfg_if::cfg_if;
 
-#[allow(dead_code, unused_variables, non_camel_case_types, non_snake_case, non_upper_case_globals)]
+use crate::{FileInfo, FileType, Filesystem, Request};
+
+#[allow(
+	dead_code,
+	unused_variables,
+	non_camel_case_types,
+	non_snake_case,
+	non_upper_case_globals
+)]
 mod fuse2 {
 	include!(concat!(env!("OUT_DIR"), "/bindings.rs"));
 }
@@ -22,7 +28,7 @@ pub struct DirFiller {
 }
 
 impl DirFiller {
-	pub fn push(&mut self, name: &CStr, /* TODO: off, st */) -> bool {
+	pub fn push(&mut self, name: &CStr /* TODO: off, st */) -> bool {
 		match unsafe { self.func.unwrap()(self.data, name.as_ptr(), std::ptr::null(), 0) } {
 			0 => true,
 			_ => false,
@@ -38,29 +44,28 @@ pub unsafe fn request() -> (&'static mut dyn Filesystem, Request) {
 	let ctx = &mut *fuse2::fuse_get_context();
 	let data = &mut *(ctx.private_data as *mut Context);
 	let req = Request {
-		uid: ctx.uid,
-		gid: ctx.uid,
+		uid:   ctx.uid,
+		gid:   ctx.uid,
 		umask: ctx.umask,
 	};
 	(&mut *data.fs, req)
 }
 fn map_path(path: *const c_char) -> &'static Path {
-	Path::new(OsStr::from_bytes(unsafe { CStr::from_ptr(path) }.to_bytes()))
+	Path::new(OsStr::from_bytes(
+		unsafe { CStr::from_ptr(path) }.to_bytes(),
+	))
 }
 
 fn map_time(t: SystemTime) -> fuse2::timespec {
 	let diff = t.duration_since(SystemTime::UNIX_EPOCH).unwrap();
 
 	fuse2::timespec {
-		tv_sec: diff.as_secs() as i64,
+		tv_sec:  diff.as_secs() as i64,
 		tv_nsec: diff.subsec_nanos() as i64,
 	}
 }
 
-unsafe extern "C" fn fs_getattr(
-	path: *const c_char,
-	st: *mut fuse2::stat,
-) -> c_int {
+unsafe extern "C" fn fs_getattr(path: *const c_char, st: *mut fuse2::stat) -> c_int {
 	let path = map_path(path);
 	let (fs, req) = request();
 	let st = &mut *st;
@@ -76,7 +81,7 @@ unsafe extern "C" fn fs_getattr(
 				FileType::CharDevice => libc::S_IFCHR,
 				FileType::BlockDevice => libc::S_IFBLK,
 			} as u32;
-			
+
 			st.st_ino = attr.ino;
 			st.st_size = attr.size as i64;
 			st.st_blocks = attr.blocks as i64;
@@ -96,10 +101,14 @@ unsafe extern "C" fn fs_getattr(
 			st.st_uid = attr.uid;
 			st.st_gid = attr.gid;
 			st.st_rdev = attr.rdev.try_into().unwrap();
-			st.st_blksize = attr.blksize as i32;
-			st.st_flags = attr.flags;
+			st.st_blksize = attr.blksize.try_into().unwrap();
+			cfg_if! {
+				if #[cfg(any(target_os = "openbsd", target_os = "freebsd"))] {
+					st.st_flags = attr.flags;
+				}
+			}
 			0
-		},
+		}
 		Err(e) => -e.raw_os_error().unwrap_or(libc::EIO),
 	}
 }
@@ -107,11 +116,11 @@ unsafe extern "C" fn fs_getattr(
 impl From<&fuse2::fuse_file_info> for FileInfo {
 	fn from(info: &fuse2::fuse_file_info) -> Self {
 		Self {
-			fh: info.fh,
-			flags: info.flags,
-			flush: info.flush() != 0,
-			direct_io: info.direct_io() != 0,
-			keep_cache: info.keep_cache() != 0,
+			fh:          info.fh,
+			flags:       info.flags,
+			flush:       info.flush() != 0,
+			direct_io:   info.direct_io() != 0,
+			keep_cache:  info.keep_cache() != 0,
 			nonseekable: info.nonseekable() != 0,
 		}
 	}
@@ -137,10 +146,7 @@ unsafe extern "C" fn fs_readdir(
 	let path = map_path(path);
 	let (fs, req) = request();
 
-	let mut filler = DirFiller {
-		func: filler,
-		data,
-	};
+	let mut filler = DirFiller { func: filler, data };
 
 	let info = FileInfo::from(&*ffi);
 	match fs.readdir(&req, path, off as u64, &mut filler, &info) {
@@ -167,10 +173,7 @@ unsafe extern "C" fn fs_read(
 	}
 }
 
-unsafe extern "C" fn fs_open(
-	path: *const c_char,
-	ffi: *mut fuse2::fuse_file_info,
-) -> c_int {
+unsafe extern "C" fn fs_open(path: *const c_char, ffi: *mut fuse2::fuse_file_info) -> c_int {
 	let path = map_path(path);
 	let (fs, req) = request();
 	let mut info = FileInfo::from(&*ffi);
@@ -179,15 +182,12 @@ unsafe extern "C" fn fs_open(
 		Ok(()) => {
 			info.write(&mut *ffi);
 			0
-		},
+		}
 		Err(e) => -e.raw_os_error().unwrap_or(libc::EIO),
 	}
 }
 
-unsafe extern "C" fn fs_opendir(
-	path: *const c_char,
-	ffi: *mut fuse2::fuse_file_info,
-) -> c_int {
+unsafe extern "C" fn fs_opendir(path: *const c_char, ffi: *mut fuse2::fuse_file_info) -> c_int {
 	let path = map_path(path);
 	let (fs, req) = request();
 	let mut info = FileInfo::from(&*ffi);
@@ -196,15 +196,12 @@ unsafe extern "C" fn fs_opendir(
 		Ok(()) => {
 			info.write(&mut *ffi);
 			0
-		},
+		}
 		Err(e) => -e.raw_os_error().unwrap_or(libc::EIO),
 	}
 }
 
-unsafe extern "C" fn fs_statfs(
-	path: *const c_char,
-	st: *mut fuse2::statvfs,
-) -> c_int {
+unsafe extern "C" fn fs_statfs(path: *const c_char, st: *mut fuse2::statvfs) -> c_int {
 	let path = map_path(path);
 	let st = &mut *st;
 	let (fs, req) = request();
@@ -220,15 +217,21 @@ unsafe extern "C" fn fs_statfs(
 			st.f_ffree = s.ffree;
 			st.f_favail = s.favail;
 			0
-		},
+		}
 		Err(e) => -e.raw_os_error().unwrap_or(libc::EIO),
 	}
 }
 
 unsafe extern "C" fn fs_init(_info: *mut fuse2::fuse_conn_info) -> *mut c_void {
-	let (fs, req) = request();
-	fs.init(&req);
-	std::ptr::null_mut()
+	let ctx = &mut *fuse2::fuse_get_context();
+	let data = &mut *(ctx.private_data as *mut Context);
+	let req = Request {
+		uid:   ctx.uid,
+		gid:   ctx.uid,
+		umask: ctx.umask,
+	};
+	data.fs.init(&req);
+	ctx.private_data
 }
 
 unsafe extern "C" fn fs_destroy(_ptr: *mut c_void) {
@@ -318,12 +321,10 @@ pub fn xmount(mp: &Path, fs: Box<dyn Filesystem>, opts: Vec<CString>) -> Result<
 	let mut mp = mp.as_os_str().as_bytes().to_vec();
 	mp.push(b'\0');
 	let Ok(mp) = CString::from_vec_with_nul(mp) else {
-		return Err(Error::from_raw_os_error(libc::EINVAL))
+		return Err(Error::from_raw_os_error(libc::EINVAL));
 	};
 
-	let ctx = Box::new(Context {
-		fs,
-	});
+	let ctx = Box::new(Context { fs });
 
 	let mut args = opts
 		.into_iter()
@@ -338,7 +339,7 @@ pub fn xmount(mp: &Path, fs: Box<dyn Filesystem>, opts: Vec<CString>) -> Result<
 
 	let ec;
 	cfg_if! {
-		if #[cfg(target_os = "freebsd")] {
+		if #[cfg(any(target_os = "freebsd", target_os = "linux"))] {
 			ec = unsafe {
 				fuse2::fuse_main_real(argc, argv, &FSOPS, std::mem::size_of_val(&FSOPS), ctx)
 			};

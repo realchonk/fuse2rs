@@ -1,6 +1,8 @@
 use std::{
-	io::{Error, Result}, path::Path
+	io::{Error, Result},
+	path::Path,
 };
+
 use fuse2rs::*;
 
 struct Testfs;
@@ -8,11 +10,7 @@ struct Testfs;
 const TEXT: &[u8] = b"Hello World\n";
 
 impl Filesystem for Testfs {
-	fn getattr(
-		&mut self,
-		_req: &Request,
-		path: &Path,
-	) -> Result<FileAttr> {
+	fn getattr(&mut self, _req: &Request, path: &Path) -> Result<FileAttr> {
 		if path == Path::new("/") {
 			Ok(FileAttr {
 				kind: FileType::Directory,
@@ -87,9 +85,7 @@ impl Filesystem for Testfs {
 }
 
 fn main() {
-	let mp = std::env::args_os()
-		.nth(1)
-		.unwrap();
+	let mp = std::env::args_os().nth(1).unwrap();
 	let args = vec![
 		MountOption::Foreground,
 		MountOption::Debug,

@@ -1,11 +1,15 @@
 use std::{
-	fmt::{self, Display, Formatter}, process::{Child, Command}, thread::sleep, time::{Duration, Instant}
+	fmt::{self, Display, Formatter},
+	process::{Child, Command},
+	thread::sleep,
+	time::{Duration, Instant},
 };
-use tempfile::{tempdir, TempDir};
+
 use cfg_if::cfg_if;
+use tempfile::{tempdir, TempDir};
 
 struct Harness {
-	dir: TempDir,
+	dir:   TempDir,
 	child: Child,
 }
 
@@ -44,7 +48,7 @@ impl Harness {
 			.arg(dir.path())
 			.spawn()
 			.unwrap();
-		
+
 		waitfor(Duration::from_secs(5), || {
 			let s = nix::sys::statfs::statfs(dir.path()).unwrap();
 
@@ -53,15 +57,14 @@ impl Harness {
 					s.filesystem_type_name() == "fuse"
 				} else if #[cfg(target_os = "freebsd")] {
 					s.filesystem_type_name() == "fusefs"
-				}
+				} else if #[cfg(target_os = "linux")] {
+										s.filesystem_type() == nix::sys::statfs::FUSE_SUPER_MAGIC
+								}
 			}
-			
-		}).unwrap();
-		
-		Self {
-			dir,
-			child,
-		}
+		})
+		.unwrap();
+
+		Self { dir, child }
 	}
 }
 
