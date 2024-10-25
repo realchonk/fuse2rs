@@ -181,6 +181,24 @@ unsafe extern "C" fn fs_read(
 	}
 }
 
+unsafe extern "C" fn fs_write(
+	path: *const c_char,
+	buf: *const c_char,
+	size: usize,
+	off: fuse2::off_t,
+	ffi: *mut fuse2::fuse_file_info,
+) -> c_int {
+	let path = map_path(path);
+	let (fs, req) = request();
+	let info = FileInfo::from(&*ffi);
+	let buf = std::slice::from_raw_parts(buf as *const u8, size);
+
+	match fs.write(&req, path, off as u64, buf, &info) {
+		Ok(n) => n as c_int,
+		Err(e) => map_err(e),
+	}
+}
+
 unsafe extern "C" fn fs_open(path: *const c_char, ffi: *mut fuse2::fuse_file_info) -> c_int {
 	let path = map_path(path);
 	let (fs, req) = request();
@@ -367,7 +385,7 @@ static FSOPS: fuse2::fuse_operations = fuse2::fuse_operations {
 	utime: Some(fs_utime),
 	open: Some(fs_open),
 	read: Some(fs_read),
-	write: None,
+	write: Some(fs_write),
 	statfs: Some(fs_statfs),
 	flush: None,
 	release: Some(fs_release),

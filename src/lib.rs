@@ -112,6 +112,18 @@ pub trait Filesystem {
 		let _ = (path, atime, mtime);
 		Err(Error::from_raw_os_error(libc::ENOSYS))
 	}
+
+	fn write(
+		&mut self,
+		_req: &Request,
+		path: &Path,
+		off: u64,
+		buf: &[u8],
+		_info: &FileInfo,
+	) -> Result<usize> {
+		let _ = (path, off, buf);
+		Err(Error::from_raw_os_error(libc::ENOSYS))
+	}
 }
 
 #[derive(Debug, Default, Clone, Copy)]
