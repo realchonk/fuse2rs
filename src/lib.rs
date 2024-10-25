@@ -129,6 +129,21 @@ pub trait Filesystem {
 		let _ = (path, off, buf);
 		Err(Error::from_raw_os_error(libc::ENOSYS))
 	}
+
+	fn link(&mut self, _req: &Request, name1: &Path, name2: &Path) -> Result<()> {
+		let _ = (name1, name2);
+		Err(Error::from_raw_os_error(libc::ENOSYS))
+	}
+
+	fn symlink(&mut self, _req: &Request, name1: &Path, name2: &Path) -> Result<()> {
+		let _ = (name1, name2);
+		Err(Error::from_raw_os_error(libc::ENOSYS))
+	}
+
+	fn rename(&mut self, _req: &Request, from: &Path, to: &Path) -> Result<()> {
+		let _ = (from, to);
+		Err(Error::from_raw_os_error(libc::ENOSYS))
+	}
 }
 
 #[derive(Debug, Default, Clone, Copy)]

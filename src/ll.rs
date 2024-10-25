@@ -375,6 +375,30 @@ unsafe extern "C" fn fs_utimens(path: *const c_char, ts: *const timespec) -> c_i
 	map(fs.utime(&req, path, at, mt))
 }
 
+unsafe extern "C" fn fs_link(name1: *const c_char, name2: *const c_char) -> c_int {
+	let name1 = map_path(name1);
+	let name2 = map_path(name2);
+	let (fs, req) = request();
+
+	map(fs.link(&req, name1, name2))
+}
+
+unsafe extern "C" fn fs_symlink(name1: *const c_char, name2: *const c_char) -> c_int {
+	let name1 = map_path(name1);
+	let name2 = map_path(name2);
+	let (fs, req) = request();
+
+	map(fs.symlink(&req, name1, name2))
+}
+
+unsafe extern "C" fn fs_rename(from: *const c_char, to: *const c_char) -> c_int {
+	let from = map_path(from);
+	let to = map_path(to);
+	let (fs, req) = request();
+
+	map(fs.rename(&req, from, to))
+}
+
 static FSOPS: fuse2::fuse_operations = fuse2::fuse_operations {
 	access: None,
 	bmap: None,
@@ -385,9 +409,9 @@ static FSOPS: fuse2::fuse_operations = fuse2::fuse_operations {
 	mkdir: Some(fs_mkdir),
 	unlink: Some(fs_unlink),
 	rmdir: Some(fs_rmdir),
-	symlink: None,
-	rename: None,
-	link: None,
+	symlink: Some(fs_symlink),
+	rename: Some(fs_rename),
+	link: Some(fs_link),
 	chmod: Some(fs_chmod),
 	chown: Some(fs_chown),
 	truncate: None,
