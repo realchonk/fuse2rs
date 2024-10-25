@@ -93,6 +93,11 @@ pub trait Filesystem {
 		Err(Error::from_raw_os_error(libc::ENOSYS))
 	}
 
+	fn mkdir(&mut self, _req: &Request, path: &Path, mode: u32) -> Result<()> {
+		let _ = (path, mode);
+		Err(Error::from_raw_os_error(libc::ENOSYS))
+	}
+
 	fn chown(&mut self, _req: &Request, path: &Path, uid: Option<u32>, gid: Option<u32>) -> Result<()> {
 		let _ = (path, uid, gid);
 		Err(Error::from_raw_os_error(libc::ENOSYS))
