@@ -66,51 +66,13 @@ fn map_time(t: SystemTime) -> fuse2::timespec {
 	}
 }
 
-unsafe extern "C" fn fs_getattr(path: *const c_char, st: *mut fuse2::stat) -> c_int {
-	let path = map_path(path);
-	let (fs, req) = request();
-	let st = &mut *st;
-
-	match fs.getattr(&req, path) {
-		Ok(attr) => {
-			let kind = match attr.kind {
-				FileType::RegularFile => libc::S_IFREG,
-				FileType::Directory => libc::S_IFDIR,
-				FileType::Symlink => libc::S_IFLNK,
-				FileType::Socket => libc::S_IFSOCK,
-				FileType::NamedPipe => libc::S_IFIFO,
-				FileType::CharDevice => libc::S_IFCHR,
-				FileType::BlockDevice => libc::S_IFBLK,
-			} as u32;
-
-			st.st_ino = attr.ino;
-			st.st_size = attr.size as i64;
-			st.st_blocks = attr.blocks as i64;
-			st.st_atim = map_time(attr.atime);
-			st.st_mtim = map_time(attr.mtime);
-			st.st_ctim = map_time(attr.ctime);
-			cfg_if! {
-				if #[cfg(target_os = "openbsd")] {
-					st.__st_birthtim = map_time(attr.btime);
-				} else if #[cfg(target_os = "freebsd")] {
-					st.st_birthtim = map_time(attr.btime);
-				} else {
-				}
-			}
-			st.st_mode = (kind | attr.perm as u32).try_into().unwrap();
-			st.st_nlink = attr.nlink.try_into().unwrap();
-			st.st_uid = attr.uid;
-			st.st_gid = attr.gid;
-			st.st_rdev = attr.rdev.try_into().unwrap();
-			st.st_blksize = attr.blksize.try_into().unwrap();
-			cfg_if! {
-				if #[cfg(any(target_os = "openbsd", target_os = "freebsd"))] {
-					st.st_flags = attr.flags;
-				}
-			}
-			0
-		}
-		Err(e) => -e.raw_os_error().unwrap_or(libc::EIO),
+fn map_err(e: Error) -> i32 {
+	-e.raw_os_error().unwrap_or(libc::EIO)
+}
+fn map(r: Result<()>) -> i32 {
+	match r {
+		Ok(()) => 0,
+		Err(e) => map_err(e),
 	}
 }
 
@@ -137,6 +99,54 @@ impl FileInfo {
 	}
 }
 
+unsafe extern "C" fn fs_getattr(path: *const c_char, st: *mut fuse2::stat) -> c_int {
+	let path = map_path(path);
+	let (fs, req) = request();
+	let st = &mut *st;
+
+	map(
+		fs
+			.getattr(&req, path)
+			.map(|attr| {
+				let kind = match attr.kind {
+					FileType::RegularFile => libc::S_IFREG,
+					FileType::Directory => libc::S_IFDIR,
+					FileType::Symlink => libc::S_IFLNK,
+					FileType::Socket => libc::S_IFSOCK,
+					FileType::NamedPipe => libc::S_IFIFO,
+					FileType::CharDevice => libc::S_IFCHR,
+					FileType::BlockDevice => libc::S_IFBLK,
+				} as u32;
+
+				st.st_ino = attr.ino;
+				st.st_size = attr.size as i64;
+				st.st_blocks = attr.blocks as i64;
+				st.st_atim = map_time(attr.atime);
+				st.st_mtim = map_time(attr.mtime);
+				st.st_ctim = map_time(attr.ctime);
+				cfg_if! {
+					if #[cfg(target_os = "openbsd")] {
+						st.__st_birthtim = map_time(attr.btime);
+					} else if #[cfg(target_os = "freebsd")] {
+						st.st_birthtim = map_time(attr.btime);
+					} else {
+					}
+				}
+				st.st_mode = (kind | attr.perm as u32).try_into().unwrap();
+				st.st_nlink = attr.nlink.try_into().unwrap();
+				st.st_uid = attr.uid;
+				st.st_gid = attr.gid;
+				st.st_rdev = attr.rdev.try_into().unwrap();
+				st.st_blksize = attr.blksize.try_into().unwrap();
+				cfg_if! {
+					if #[cfg(any(target_os = "openbsd", target_os = "freebsd"))] {
+						st.st_flags = attr.flags;
+					}
+				}
+			})
+	)
+}
+
 unsafe extern "C" fn fs_readdir(
 	path: *const c_char,
 	data: *mut c_void,
@@ -150,10 +160,7 @@ unsafe extern "C" fn fs_readdir(
 	let mut filler = DirFiller { func: filler, data };
 
 	let info = FileInfo::from(&*ffi);
-	match fs.readdir(&req, path, off as u64, &mut filler, &info) {
-		Ok(()) => 0,
-		Err(e) => -e.raw_os_error().unwrap_or(libc::EIO),
-	}
+	map(fs.readdir(&req, path, off as u64, &mut filler, &info))
 }
 
 unsafe extern "C" fn fs_read(
@@ -170,7 +177,7 @@ unsafe extern "C" fn fs_read(
 
 	match fs.read(&req, path, off as u64, buf, &info) {
 		Ok(n) => n as c_int,
-		Err(e) => -e.raw_os_error().unwrap_or(libc::EIO),
+		Err(e) => map_err(e),
 	}
 }
 
@@ -179,13 +186,11 @@ unsafe extern "C" fn fs_open(path: *const c_char, ffi: *mut fuse2::fuse_file_inf
 	let (fs, req) = request();
 	let mut info = FileInfo::from(&*ffi);
 
-	match fs.open(&req, path, &mut info) {
-		Ok(()) => {
-			info.write(&mut *ffi);
-			0
-		}
-		Err(e) => -e.raw_os_error().unwrap_or(libc::EIO),
-	}
+	map(
+		fs
+			.open(&req, path, &mut info)
+			.map(|_| info.write(&mut *ffi))
+	)
 }
 
 unsafe extern "C" fn fs_opendir(path: *const c_char, ffi: *mut fuse2::fuse_file_info) -> c_int {
@@ -193,13 +198,11 @@ unsafe extern "C" fn fs_opendir(path: *const c_char, ffi: *mut fuse2::fuse_file_
 	let (fs, req) = request();
 	let mut info = FileInfo::from(&*ffi);
 
-	match fs.opendir(&req, path, &mut info) {
-		Ok(()) => {
-			info.write(&mut *ffi);
-			0
-		}
-		Err(e) => -e.raw_os_error().unwrap_or(libc::EIO),
-	}
+	map(
+		fs
+			.opendir(&req, path, &mut info)
+			.map(|_| info.write(&mut *ffi))
+	)
 }
 
 unsafe extern "C" fn fs_statfs(path: *const c_char, st: *mut fuse2::statvfs) -> c_int {
@@ -207,20 +210,20 @@ unsafe extern "C" fn fs_statfs(path: *const c_char, st: *mut fuse2::statvfs) -> 
 	let st = &mut *st;
 	let (fs, req) = request();
 
-	match fs.statfs(&req, path) {
-		Ok(s) => {
-			st.f_bsize = s.bsize.into();
-			st.f_frsize = s.frsize.into();
-			st.f_blocks = s.blocks;
-			st.f_bfree = s.bfree;
-			st.f_bavail = s.bavail;
-			st.f_files = s.files;
-			st.f_ffree = s.ffree;
-			st.f_favail = s.favail;
-			0
-		}
-		Err(e) => -e.raw_os_error().unwrap_or(libc::EIO),
-	}
+	map(
+		fs
+			.statfs(&req, path)
+			.map(|s| {
+				st.f_bsize = s.bsize.into();
+				st.f_frsize = s.frsize.into();
+				st.f_blocks = s.blocks;
+				st.f_bfree = s.bfree;
+				st.f_bavail = s.bavail;
+				st.f_files = s.files;
+				st.f_ffree = s.ffree;
+				st.f_favail = s.favail;
+			})
+	)
 }
 
 unsafe extern "C" fn fs_init(_info: *mut fuse2::fuse_conn_info) -> *mut c_void {
@@ -245,10 +248,7 @@ unsafe extern "C" fn fs_readlink(path: *const c_char, buf: *mut c_char, size: us
 	let buf = std::slice::from_raw_parts_mut(buf as *mut u8, size);
 	let (fs, req) = request();
 
-	match fs.readlink(&req, path, buf) {
-		Ok(()) => 0,
-		Err(e) => -e.raw_os_error().unwrap_or(libc::EIO),
-	}
+	map(fs.readlink(&req, path, buf))
 }
 
 unsafe extern "C" fn fs_release(path: *const c_char, ffi: *mut fuse2::fuse_file_info) -> c_int {
@@ -256,10 +256,7 @@ unsafe extern "C" fn fs_release(path: *const c_char, ffi: *mut fuse2::fuse_file_
 	let info = FileInfo::from(&*ffi);
 	let (fs, req) = request();
 
-	match fs.release(&req, path, &info) {
-		Ok(()) => 0,
-		Err(e) => -e.raw_os_error().unwrap_or(libc::EIO),
-	}
+	map(fs.release(&req, path, &info))
 }
 
 unsafe extern "C" fn fs_releasedir(path: *const c_char, ffi: *mut fuse2::fuse_file_info) -> c_int {
@@ -267,20 +264,14 @@ unsafe extern "C" fn fs_releasedir(path: *const c_char, ffi: *mut fuse2::fuse_fi
 	let info = FileInfo::from(&*ffi);
 	let (fs, req) = request();
 
-	match fs.releasedir(&req, path, &info) {
-		Ok(()) => 0,
-		Err(e) => -e.raw_os_error().unwrap_or(libc::EIO),
-	}
+	map(fs.releasedir(&req, path, &info))
 }
 
 unsafe extern "C" fn fs_unlink(path: *const c_char) -> c_int {
 	let path = map_path(path);
 	let (fs, req) = request();
 
-	match fs.unlink(&req, path) {
-		Ok(()) => 0,
-		Err(e) => -e.raw_os_error().unwrap_or(libc::EIO),
-	}
+	map(fs.unlink(&req, path))
 }
 
 unsafe extern "C" fn fs_chown(path: *const c_char, uid: uid_t, gid: gid_t) -> c_int {
@@ -289,10 +280,7 @@ unsafe extern "C" fn fs_chown(path: *const c_char, uid: uid_t, gid: gid_t) -> c_
 	let gid = if gid < u32::MAX { Some(gid) } else { None };
 	let (fs, req) = request();
 
-	match fs.chown(&req, path, uid, gid) {
-		Ok(()) => 0,
-		Err(e) => -e.raw_os_error().unwrap_or(libc::EIO),
-	}
+	map(fs.chown(&req, path, uid, gid))
 }
 
 unsafe extern "C" fn fs_chmod(path: *const c_char, mode: mode_t) -> c_int {
@@ -300,10 +288,7 @@ unsafe extern "C" fn fs_chmod(path: *const c_char, mode: mode_t) -> c_int {
 	let mode = mode as u32;
 	let (fs, req) = request();
 
-	match fs.chmod(&req, path, mode) {
-		Ok(()) => 0,
-		Err(e) => -e.raw_os_error().unwrap_or(libc::EIO),
-	}
+	map(fs.chmod(&req, path, mode))
 }
 
 unsafe extern "C" fn fs_utime(path: *const c_char, buf: *mut utimbuf) -> c_int {
@@ -325,10 +310,7 @@ unsafe extern "C" fn fs_utime(path: *const c_char, buf: *mut utimbuf) -> c_int {
 		(f(buf.actime), f(buf.modtime))
 	};
 
-	match fs.utime(&req, path, at, mt) {
-		Ok(()) => 0,
-		Err(e) => -e.raw_os_error().unwrap_or(libc::EIO),
-	}
+	map(fs.utime(&req, path, at, mt))
 }
 
 unsafe extern "C" fn fs_utimens(path: *const c_char, ts: *const timespec) -> c_int {
@@ -349,10 +331,7 @@ unsafe extern "C" fn fs_utimens(path: *const c_char, ts: *const timespec) -> c_i
 		(f(ts.read()), f(ts.add(1).read()))
 	};
 
-	match fs.utime(&req, path, at, mt) {
-		Ok(()) => 0,
-		Err(e) => -e.raw_os_error().unwrap_or(libc::EIO),
-	}
+	map(fs.utime(&req, path, at, mt))
 }
 
 static FSOPS: fuse2::fuse_operations = fuse2::fuse_operations {
