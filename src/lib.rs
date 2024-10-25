@@ -144,6 +144,11 @@ pub trait Filesystem {
 		let _ = (from, to);
 		Err(Error::from_raw_os_error(libc::ENOSYS))
 	}
+
+	fn truncate(&mut self, _req: &Request, path: &Path, size: u64) -> Result<()> {
+		let _ = (path, size);
+		Err(Error::from_raw_os_error(libc::ENOSYS))
+	}
 }
 
 #[derive(Debug, Default, Clone, Copy)]

@@ -6,13 +6,11 @@ use std::{
 	path::Path,
 	time::{Duration, SystemTime},
 };
-
-use fuse2::{gid_t, mode_t, timespec, uid_t, utimbuf};
 use cfg_if::cfg_if;
 
 use crate::{FileInfo, FileType, Filesystem, Request};
 
-use self::fuse2::dev_t;
+use self::fuse2::{dev_t, off_t, gid_t, mode_t, timespec, uid_t, utimbuf};
 
 #[allow(
 	dead_code,
@@ -399,6 +397,14 @@ unsafe extern "C" fn fs_rename(from: *const c_char, to: *const c_char) -> c_int 
 	map(fs.rename(&req, from, to))
 }
 
+unsafe extern "C" fn fs_truncate(path: *const c_char, size: off_t) -> c_int {
+	let path = map_path(path);
+	let (fs, req) = request();
+
+	map(fs.truncate(&req, path, size as u64))
+}
+
+
 static FSOPS: fuse2::fuse_operations = fuse2::fuse_operations {
 	access: None,
 	bmap: None,
@@ -414,7 +420,7 @@ static FSOPS: fuse2::fuse_operations = fuse2::fuse_operations {
 	link: Some(fs_link),
 	chmod: Some(fs_chmod),
 	chown: Some(fs_chown),
-	truncate: None,
+	truncate: Some(fs_truncate),
 	utime: Some(fs_utime),
 	open: Some(fs_open),
 	read: Some(fs_read),
