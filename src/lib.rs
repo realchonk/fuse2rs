@@ -82,6 +82,26 @@ pub trait Filesystem {
 		let _ = (path, buf);
 		Err(Error::from_raw_os_error(libc::ENOSYS))
 	}
+
+	fn unlink(&mut self, _req: &Request, path: &Path) -> Result<()> {
+		let _ = path;
+		Err(Error::from_raw_os_error(libc::ENOSYS))
+	}
+
+	fn chown(&mut self, _req: &Request, path: &Path, uid: Option<u32>, gid: Option<u32>) -> Result<()> {
+		let _ = (path, uid, gid);
+		Err(Error::from_raw_os_error(libc::ENOSYS))
+	}
+
+	fn chmod(&mut self, _req: &Request, path: &Path, mode: u32) -> Result<()> {
+		let _ = (path, mode);
+		Err(Error::from_raw_os_error(libc::ENOSYS))
+	}
+
+	fn utime(&mut self, _req: &Request, path: &Path, atime: SystemTime, mtime: SystemTime) -> Result<()> {
+		let _ = (path, atime, mtime);
+		Err(Error::from_raw_os_error(libc::ENOSYS))
+	}
 }
 
 #[derive(Debug, Default, Clone, Copy)]

@@ -4,9 +4,10 @@ use std::{
 	iter::once,
 	os::unix::ffi::OsStrExt,
 	path::Path,
-	time::SystemTime,
+	time::{Duration, SystemTime},
 };
 
+use fuse2::{gid_t, mode_t, timespec, uid_t, utimbuf};
 use cfg_if::cfg_if;
 
 use crate::{FileInfo, FileType, Filesystem, Request};
@@ -272,6 +273,88 @@ unsafe extern "C" fn fs_releasedir(path: *const c_char, ffi: *mut fuse2::fuse_fi
 	}
 }
 
+unsafe extern "C" fn fs_unlink(path: *const c_char) -> c_int {
+	let path = map_path(path);
+	let (fs, req) = request();
+
+	match fs.unlink(&req, path) {
+		Ok(()) => 0,
+		Err(e) => -e.raw_os_error().unwrap_or(libc::EIO),
+	}
+}
+
+unsafe extern "C" fn fs_chown(path: *const c_char, uid: uid_t, gid: gid_t) -> c_int {
+	let path = map_path(path);
+	let uid = if uid < u32::MAX { Some(uid) } else { None };
+	let gid = if gid < u32::MAX { Some(gid) } else { None };
+	let (fs, req) = request();
+
+	match fs.chown(&req, path, uid, gid) {
+		Ok(()) => 0,
+		Err(e) => -e.raw_os_error().unwrap_or(libc::EIO),
+	}
+}
+
+unsafe extern "C" fn fs_chmod(path: *const c_char, mode: mode_t) -> c_int {
+	let path = map_path(path);
+	let mode = mode as u32;
+	let (fs, req) = request();
+
+	match fs.chmod(&req, path, mode) {
+		Ok(()) => 0,
+		Err(e) => -e.raw_os_error().unwrap_or(libc::EIO),
+	}
+}
+
+unsafe extern "C" fn fs_utime(path: *const c_char, buf: *mut utimbuf) -> c_int {
+	let path = map_path(path);
+	let (fs, req) = request();
+
+	let (at, mt) = if buf.is_null() {
+		let now = SystemTime::now();
+		(now, now)
+	} else {
+		let buf = &*buf;
+		let f = |t: i64| {
+			if t >= 0 {
+				SystemTime::UNIX_EPOCH + Duration::new(t as u64, 0)
+			} else {
+				SystemTime::UNIX_EPOCH - Duration::new(-t as u64, 0)
+			}
+		};
+		(f(buf.actime), f(buf.modtime))
+	};
+
+	match fs.utime(&req, path, at, mt) {
+		Ok(()) => 0,
+		Err(e) => -e.raw_os_error().unwrap_or(libc::EIO),
+	}
+}
+
+unsafe extern "C" fn fs_utimens(path: *const c_char, ts: *const timespec) -> c_int {
+	let path = map_path(path);
+	let (fs, req) = request();
+
+	let (at, mt) = if ts.is_null() {
+		let now = SystemTime::now();
+		(now, now)
+	} else {
+		let f = |t: timespec| {
+			if t.tv_sec >= 0 {
+				SystemTime::UNIX_EPOCH + Duration::new(t.tv_sec as u64, t.tv_nsec as u32)
+			} else {
+				SystemTime::UNIX_EPOCH - Duration::new(-t.tv_sec as u64, t.tv_nsec as u32)
+			}
+		};
+		(f(ts.read()), f(ts.add(1).read()))
+	};
+
+	match fs.utime(&req, path, at, mt) {
+		Ok(()) => 0,
+		Err(e) => -e.raw_os_error().unwrap_or(libc::EIO),
+	}
+}
+
 static FSOPS: fuse2::fuse_operations = fuse2::fuse_operations {
 	access: None,
 	bmap: None,
@@ -280,15 +363,15 @@ static FSOPS: fuse2::fuse_operations = fuse2::fuse_operations {
 	getdir: None,
 	mknod: None,
 	mkdir: None,
-	unlink: None,
+	unlink: Some(fs_unlink),
 	rmdir: None,
 	symlink: None,
 	rename: None,
 	link: None,
-	chmod: None,
-	chown: None,
+	chmod: Some(fs_chmod),
+	chown: Some(fs_chown),
 	truncate: None,
-	utime: None,
+	utime: Some(fs_utime),
 	open: Some(fs_open),
 	read: Some(fs_read),
 	write: None,
@@ -310,7 +393,7 @@ static FSOPS: fuse2::fuse_operations = fuse2::fuse_operations {
 	ftruncate: None,
 	fgetattr: None,
 	lock: None,
-	utimens: None,
+	utimens: Some(fs_utimens),
 
 	// this is _very_ ugly
 	..unsafe { std::mem::zeroed() }
